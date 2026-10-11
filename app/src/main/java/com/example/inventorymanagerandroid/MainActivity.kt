@@ -20,12 +20,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.example.inventorymanagerandroid.ui.theme.InventoryManagerAndroidTheme
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -42,6 +43,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
+
                     InventoryApp(
                         modifier = Modifier.padding(innerPadding)
                     )
@@ -51,51 +53,134 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Controls application state and communication with Firestore.
+ */
 @Composable
-fun InventoryApp(modifier: Modifier = Modifier) {
+fun InventoryApp(
+    modifier: Modifier = Modifier
+) {
+
+    val repository = remember {
+        FirestoreRepository()
+    }
 
     val products = remember {
-        mutableStateListOf(
-            Product(1, "Coffee", "Food", 15, 5),
-            Product(2, "Notebook", "Office", 30, 10),
-            Product(3, "Tea", "Food", 8, 5)
-        )
+        mutableStateListOf<Product>()
     }
 
     var currentScreen by remember {
         mutableStateOf("inventory")
     }
 
+    var errorMessage by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    // Listen for changes in Firestore.
+    DisposableEffect(repository) {
+
+        val listener = repository.listenToProducts(
+            onProductsChanged = { firestoreProducts ->
+
+                products.clear()
+                products.addAll(firestoreProducts)
+
+                errorMessage = null
+            },
+
+            onError = { exception ->
+                errorMessage = exception.message
+            }
+        )
+
+        onDispose {
+            listener.remove()
+        }
+    }
+
     when (currentScreen) {
 
         "inventory" -> {
+
             InventoryScreen(
                 products = products,
+                errorMessage = errorMessage,
+
                 onAddProductClick = {
                     currentScreen = "add"
                 },
+
+                onIncreaseStock = { product ->
+
+                    repository.updateQuantity(
+                        productId = product.id,
+                        newQuantity = product.quantity + 1,
+
+                        onError = { exception ->
+                            errorMessage = exception.message
+                        }
+                    )
+                },
+
+                onDecreaseStock = { product ->
+
+                    if (product.quantity > 0) {
+
+                        repository.updateQuantity(
+                            productId = product.id,
+                            newQuantity = product.quantity - 1,
+
+                            onError = { exception ->
+                                errorMessage = exception.message
+                            }
+                        )
+                    }
+                },
+
+                onDeleteProduct = { product ->
+
+                    repository.deleteProduct(
+                        productId = product.id,
+
+                        onError = { exception ->
+                            errorMessage = exception.message
+                        }
+                    )
+                },
+
                 modifier = modifier
             )
         }
 
         "add" -> {
+
             AddProductScreen(
-                onSaveProduct = { name, category, quantity, minimumStock ->
 
-                    val newId =
-                        (products.maxOfOrNull { it.id } ?: 0) + 1
+                onSaveProduct = {
+                        name,
+                        category,
+                        quantity,
+                        minimumStock ->
 
-                    products.add(
-                        Product(
-                            id = newId,
-                            name = name,
-                            category = category,
-                            quantity = quantity,
-                            minimumStock = minimumStock
-                        )
+                    val product = Product(
+                        name = name,
+                        category = category,
+                        quantity = quantity,
+                        minimumStock = minimumStock
                     )
 
-                    currentScreen = "inventory"
+                    repository.addProduct(
+                        product = product,
+
+                        onSuccess = {
+                            currentScreen = "inventory"
+                        },
+
+                        onError = { exception ->
+                            errorMessage = exception.message
+                        }
+                    )
                 },
 
                 onCancel = {
@@ -108,10 +193,17 @@ fun InventoryApp(modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Displays products retrieved from Firestore.
+ */
 @Composable
 fun InventoryScreen(
-    products: SnapshotStateList<Product>,
+    products: List<Product>,
+    errorMessage: String?,
     onAddProductClick: () -> Unit,
+    onIncreaseStock: (Product) -> Unit,
+    onDecreaseStock: (Product) -> Unit,
+    onDeleteProduct: (Product) -> Unit,
     modifier: Modifier = Modifier
 ) {
 
@@ -119,61 +211,80 @@ fun InventoryScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+
+        verticalArrangement =
+            Arrangement.spacedBy(12.dp)
     ) {
 
         item {
+
             Text(
                 text = "Inventory Manager",
                 style = MaterialTheme.typography.headlineMedium
             )
         }
 
+        if (errorMessage != null) {
+
+            item {
+
+                Text(
+                    text = "Database error: $errorMessage",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+
+        if (products.isEmpty()) {
+
+            item {
+
+                Text(
+                    text = "No products in inventory."
+                )
+            }
+        }
+
         items(
             items = products,
-            key = { product -> product.id }
+            key = { product ->
+                product.id
+            }
         ) { product ->
 
             ProductCard(
                 product = product,
 
                 onIncreaseStock = {
-                    val index = products.indexOfFirst {
-                        it.id == product.id
-                    }
-
-                    if (index != -1) {
-                        products[index] = product.copy(
-                            quantity = product.quantity + 1
-                        )
-                    }
+                    onIncreaseStock(product)
                 },
 
                 onDecreaseStock = {
-                    val index = products.indexOfFirst {
-                        it.id == product.id
-                    }
+                    onDecreaseStock(product)
+                },
 
-                    if (index != -1 && product.quantity > 0) {
-                        products[index] = product.copy(
-                            quantity = product.quantity - 1
-                        )
-                    }
+                onDeleteProduct = {
+                    onDeleteProduct(product)
                 }
             )
         }
 
         item {
+
             Button(
                 onClick = onAddProductClick,
                 modifier = Modifier.fillMaxWidth()
             ) {
+
                 Text("Add Product")
             }
         }
     }
 }
 
+/**
+ * Displays the form used to add a product to Firestore.
+ */
 @Composable
 fun AddProductScreen(
     onSaveProduct: (
@@ -182,6 +293,7 @@ fun AddProductScreen(
         Int,
         Int
     ) -> Unit,
+
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -202,8 +314,11 @@ fun AddProductScreen(
         mutableStateOf("")
     }
 
-    val quantityNumber = quantity.toIntOrNull()
-    val minimumStockNumber = minimumStock.toIntOrNull()
+    val quantityNumber =
+        quantity.toIntOrNull()
+
+    val minimumStockNumber =
+        minimumStock.toIntOrNull()
 
     val formIsValid =
         name.isNotBlank() &&
@@ -217,7 +332,9 @@ fun AddProductScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+
+        verticalArrangement =
+            Arrangement.spacedBy(12.dp)
     ) {
 
         Text(
@@ -227,56 +344,71 @@ fun AddProductScreen(
 
         OutlinedTextField(
             value = name,
+
             onValueChange = {
                 name = it
             },
+
             label = {
                 Text("Product name")
             },
+
             modifier = Modifier.fillMaxWidth()
         )
 
         OutlinedTextField(
             value = category,
+
             onValueChange = {
                 category = it
             },
+
             label = {
                 Text("Category")
             },
+
             modifier = Modifier.fillMaxWidth()
         )
 
         OutlinedTextField(
             value = quantity,
+
             onValueChange = {
                 quantity = it
             },
+
             label = {
                 Text("Quantity")
             },
+
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number
             ),
+
             modifier = Modifier.fillMaxWidth()
         )
 
         OutlinedTextField(
             value = minimumStock,
+
             onValueChange = {
                 minimumStock = it
             },
+
             label = {
                 Text("Minimum stock")
             },
+
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number
             ),
+
             modifier = Modifier.fillMaxWidth()
         )
 
         Button(
             onClick = {
+
                 onSaveProduct(
                     name,
                     category,
@@ -284,9 +416,11 @@ fun AddProductScreen(
                     minimumStockNumber!!
                 )
             },
+
             enabled = formIsValid,
             modifier = Modifier.fillMaxWidth()
         ) {
+
             Text("Save Product")
         }
 
@@ -294,16 +428,21 @@ fun AddProductScreen(
             onClick = onCancel,
             modifier = Modifier.fillMaxWidth()
         ) {
+
             Text("Cancel")
         }
     }
 }
 
+/**
+ * Displays one product and its available inventory actions.
+ */
 @Composable
 fun ProductCard(
     product: Product,
     onIncreaseStock: () -> Unit,
-    onDecreaseStock: () -> Unit
+    onDecreaseStock: () -> Unit,
+    onDeleteProduct: () -> Unit
 ) {
 
     Card(
@@ -312,7 +451,9 @@ fun ProductCard(
 
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+
+            verticalArrangement =
+                Arrangement.spacedBy(6.dp)
         ) {
 
             Text(
@@ -320,11 +461,23 @@ fun ProductCard(
                 style = MaterialTheme.typography.titleMedium
             )
 
-            Text(text = "Category: ${product.category}")
-            Text(text = "Stock: ${product.quantity}")
-            Text(text = "Minimum stock: ${product.minimumStock}")
+            Text(
+                text = "Category: ${product.category}"
+            )
 
-            if (product.quantity < product.minimumStock) {
+            Text(
+                text = "Stock: ${product.quantity}"
+            )
+
+            Text(
+                text = "Minimum stock: ${product.minimumStock}"
+            )
+
+            if (
+                product.quantity <
+                product.minimumStock
+            ) {
+
                 Text(
                     text = "LOW STOCK",
                     color = MaterialTheme.colorScheme.error,
@@ -333,30 +486,47 @@ fun ProductCard(
             }
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement =
+                    Arrangement.spacedBy(8.dp)
             ) {
 
                 Button(
                     onClick = onDecreaseStock,
                     enabled = product.quantity > 0
                 ) {
+
                     Text("-")
                 }
 
                 Button(
                     onClick = onIncreaseStock
                 ) {
+
                     Text("+")
+                }
+
+                Button(
+                    onClick = onDeleteProduct
+                ) {
+
+                    Text("Delete")
                 }
             }
         }
     }
 }
 
+/**
+ * Displays a preview of the application.
+ */
 @Preview(showBackground = true)
 @Composable
 fun InventoryAppPreview() {
+
     InventoryManagerAndroidTheme {
-        InventoryApp()
+
+        Text(
+            text = "Inventory Manager"
+        )
     }
 }
