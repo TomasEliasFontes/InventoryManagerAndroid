@@ -1,30 +1,56 @@
-# Inventory Manager Android
+# Overview
 
-## Overview
+Inventory Manager Android is a mobile inventory management application built with Kotlin and Jetpack Compose. The application is connected to Google Cloud Firestore so inventory information is stored in the cloud instead of only in the application's local memory.
 
-Inventory Manager Android is a mobile application created with Kotlin for managing a small product inventory.
+The application allows users to view products, add new products, increase or decrease stock quantities, identify products with low stock, and delete products. When a product is created or changed in the Android application, the corresponding information is also created or updated in Firestore. The application listens for database changes and updates the inventory displayed on the screen.
 
-The app allows users to view products, increase or decrease stock quantities, identify products with low stock, and add new products through a separate screen. To use the app, the user can tap the `+` or `-` buttons to update the quantity of a product or select **Add Product** to enter a product name, category, quantity, and minimum stock level.
+To use the application, the user can select **Add Product** and enter a product name, category, quantity, and minimum stock level. The `+` and `-` buttons modify the current quantity, and the **Delete** button removes the product from the inventory and from the cloud database.
 
-I created this application to continue improving my Kotlin skills while learning how to develop Android applications. My main goal was to learn how to create mobile user interfaces, manage application state, respond to user input, and work with multiple screens using Jetpack Compose.
+I created this software to continue developing my Android and Kotlin skills while learning how mobile applications communicate with cloud databases. My main goal was to understand how to create, retrieve, update, and delete cloud data and keep a Jetpack Compose user interface synchronized with remotely stored information.
+
+[Software Demo Video](PASTE_YOUR_YOUTUBE_LINK_HERE)
+
+# Cloud Database
+
+The application uses **Google Cloud Firestore**, a NoSQL cloud database provided by Firebase. Firestore stores the inventory independently from the Android application, which allows product information to remain in the database even when the development environment or application is closed.
+
+The database contains a collection named `products`. Each product is stored as a separate Firestore document with an automatically generated document ID.
+
+The structure is similar to:
+
+products
+- documentId
+    - name: "Tea"
+    - category: "Food"
+    - quantity: 8
+    - minimumStock: 5
+
+The application performs the following database operations:
+
+- **Create:** Add a new product to the `products` collection.
+- **Read:** Retrieve products from Firestore and display them in the inventory.
+- **Update:** Change the quantity of a product using the `+` and `-` buttons.
+- **Delete:** Remove a product and its document from Firestore.
 
 # Development Environment
 
-I developed the application using **Android Studio** and tested it with the Android Emulator using a virtual Pixel device.
+I developed the application using **Android Studio** and tested it using the Android Emulator with a virtual Pixel device.
 
-The application is written in **Kotlin** and uses **Jetpack Compose** to build the user interface. I also used **Material 3** components such as buttons, cards, text fields, and text elements.
+The application is written in **Kotlin** and uses **Jetpack Compose** and **Material 3** for the user interface. I used the **Firebase Firestore Android SDK** to connect the Android application to Cloud Firestore.
 
-The project uses Kotlin features such as data classes, collections, null-safe number conversion, and the `copy()` function to update product information.
+The project also uses Kotlin data classes, collections, null-safe number conversion, state management, and Firestore snapshot listeners. A `FirestoreRepository` class separates the database operations from the user interface code and handles retrieving, adding, updating, and deleting products.
 
 # Useful Websites
 
-* [Android Developers](https://developer.android.com/)
-* [Jetpack Compose Documentation](https://developer.android.com/develop/ui/compose)
-* [Kotlin Documentation](https://kotlinlang.org/docs/home.html)
+- [Firebase Documentation](https://firebase.google.com/docs)
+- [Cloud Firestore Documentation](https://firebase.google.com/docs/firestore)
+- [Android Developers - Jetpack Compose](https://developer.android.com/develop/ui/compose)
+- [Kotlin Documentation](https://kotlinlang.org/docs/home.html)
 
 # Future Work
 
-* Add persistent storage so inventory data remains available after the app is closed.
-* Connect the application to a cloud database such as Firebase Firestore.
-* Add options to edit or delete existing products.
-* Add search, filtering, and sorting options for larger inventories.
+- Replace the development Firestore security rules with more restrictive production rules.
+- Add user authentication so inventory data can be associated with specific users.
+- Add the ability to edit product names, categories, and minimum stock levels.
+- Add search, filtering, and sorting for larger inventories.
+- Improve loading, error, and confirmation messages for cloud database operations.
