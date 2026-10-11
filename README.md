@@ -8,8 +8,6 @@ To use the application, the user can select **Add Product** and enter a product 
 
 I created this software to continue developing my Android and Kotlin skills while learning how mobile applications communicate with cloud databases. My main goal was to understand how to create, retrieve, update, and delete cloud data and keep a Jetpack Compose user interface synchronized with remotely stored information.
 
-[Software Demo Video](PASTE_YOUR_YOUTUBE_LINK_HERE)
-
 # Cloud Database
 
 The application uses **Google Cloud Firestore**, a NoSQL cloud database provided by Firebase. Firestore stores the inventory independently from the Android application, which allows product information to remain in the database even when the development environment or application is closed.
